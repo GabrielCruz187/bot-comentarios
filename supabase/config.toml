@@ -1,0 +1,7 @@
+project_id = "xcsqgifgjpgwcjnmghxk"
+
+[functions.generate-comment]
+verify_jwt = true
+
+[functions.monitor-profiles]
+verify_jwt = true

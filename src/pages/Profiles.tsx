@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Users, Plus, Search, Filter } from "lucide-react"
-import { ProfileCard } from "@/components/profiles/ProfileCard"
+import { ProfileCard } from "@/components/profile/ProfileCard"
 import {
   Select,
   SelectContent,
