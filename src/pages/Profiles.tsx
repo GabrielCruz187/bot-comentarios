@@ -1,10 +1,22 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Users, Plus, Search, Filter } from "lucide-react"
 import { ProfileCard } from "@/components/profile/ProfileCard"
+import { useToast } from "@/hooks/use-toast"
+import { supabase } from "@/integrations/supabase/client"
+import { useAuth } from "@/hooks/useAuth"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import {
   Select,
   SelectContent,
@@ -12,44 +24,88 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-
-const mockProfiles = [
-  {
-    id: "1",
-    name: "João Silva",
-    handle: "joaosilva",
-    platform: "linkedin" as const,
-    avatar: "",
-    status: "active" as const,
-    totalComments: 45,
-    lastActivity: "2 horas atrás"
-  },
-  {
-    id: "2",
-    name: "Maria Santos",
-    handle: "mariasantos",
-    platform: "twitter" as const,
-    avatar: "",
-    status: "paused" as const,
-    totalComments: 23,
-    lastActivity: "1 dia atrás"
-  },
-  {
-    id: "3",
-    name: "Pedro Costa",
-    handle: "pedrocosta",
-    platform: "linkedin" as const,
-    avatar: "",
-    status: "active" as const,
-    totalComments: 67,
-    lastActivity: "30 min atrás"
-  }
-]
+import { Label } from "@/components/ui/label"
 
 export default function Profiles() {
   const [searchTerm, setSearchTerm] = useState("")
   const [platformFilter, setPlatformFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [profiles, setProfiles] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [open, setOpen] = useState(false)
+  const [newProfile, setNewProfile] = useState({
+    name: "",
+    username: "",
+    platform: "linkedin"
+  })
+  const { toast } = useToast()
+  const { user } = useAuth()
+
+  useEffect(() => {
+    loadProfiles()
+  }, [])
+
+  const loadProfiles = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setProfiles(data || [])
+    } catch (error) {
+      console.error('Erro ao carregar perfis:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar os perfis",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleAddProfile = async () => {
+    if (!newProfile.name.trim() || !newProfile.username.trim()) {
+      toast({
+        title: "Erro",
+        description: "Preencha todos os campos obrigatórios",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setLoading(true)
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .insert({
+          name: newProfile.name.trim(),
+          username: newProfile.username.trim(),
+          platform: newProfile.platform,
+          user_id: user?.id
+        })
+
+      if (error) throw error
+
+      toast({
+        title: "Sucesso",
+        description: "Perfil adicionado com sucesso!"
+      })
+
+      setNewProfile({ name: "", username: "", platform: "linkedin" })
+      setOpen(false)
+      loadProfiles()
+    } catch (error) {
+      console.error('Erro ao adicionar perfil:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível adicionar o perfil",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -60,10 +116,62 @@ export default function Profiles() {
             Gerencie até 50 perfis para monitoramento automático
           </p>
         </div>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Adicionar Perfil
-        </Button>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Adicionar Perfil
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Adicionar Novo Perfil</DialogTitle>
+              <DialogDescription>
+                Adicione um perfil para monitoramento automático de comentários.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="name">Nome do Perfil</Label>
+                <Input
+                  id="name"
+                  placeholder="Ex: João Silva"
+                  value={newProfile.name}
+                  onChange={(e) => setNewProfile({...newProfile, name: e.target.value})}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="username">Username/Handle</Label>
+                <Input
+                  id="username"
+                  placeholder="Ex: joaosilva ou @joaosilva"
+                  value={newProfile.username}
+                  onChange={(e) => setNewProfile({...newProfile, username: e.target.value})}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="platform">Plataforma</Label>
+                <Select 
+                  value={newProfile.platform} 
+                  onValueChange={(value) => setNewProfile({...newProfile, platform: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="linkedin">LinkedIn</SelectItem>
+                    <SelectItem value="twitter">X (Twitter)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={handleAddProfile} disabled={loading}>
+                {loading ? "Adicionando..." : "Adicionar Perfil"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Estatísticas */}
@@ -74,7 +182,7 @@ export default function Profiles() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockProfiles.length}</div>
+            <div className="text-2xl font-bold">{profiles.length}</div>
             <p className="text-xs text-muted-foreground">
               de 50 perfis permitidos
             </p>
@@ -88,7 +196,7 @@ export default function Profiles() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {mockProfiles.filter(p => p.status === 'active').length}
+              {profiles.filter(p => p.status === 'active').length}
             </div>
             <p className="text-xs text-muted-foreground">
               monitorando ativamente
@@ -156,10 +264,29 @@ export default function Profiles() {
 
       {/* Lista de Perfis */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {mockProfiles.map((profile) => (
-          <ProfileCard key={profile.id} profile={profile} />
-        ))}
+        {profiles.length === 0 ? (
+          <div className="col-span-full">
+            <Card>
+              <CardContent className="pt-6 text-center">
+                <p className="text-muted-foreground">Nenhum perfil cadastrado</p>
+              </CardContent>
+            </Card>
+          </div>
+        ) : (
+          profiles
+            .filter(profile => {
+              const matchesSearch = profile.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                  profile.username.toLowerCase().includes(searchTerm.toLowerCase())
+              const matchesPlatform = platformFilter === "all" || profile.platform === platformFilter
+              const matchesStatus = statusFilter === "all" || profile.status === statusFilter
+              return matchesSearch && matchesPlatform && matchesStatus
+            })
+            .map((profile) => (
+              <ProfileCard key={profile.id} profile={profile} />
+            ))
+        )}
       </div>
     </div>
   )
 }
+

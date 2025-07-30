@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,6 +15,9 @@ import {
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+import { supabase } from "@/integrations/supabase/client"
+import { useAuth } from "@/hooks/useAuth"
+import { useToast } from "@/hooks/use-toast"
 
 export default function AISettings() {
   const [tone, setTone] = useState("professional")
@@ -22,6 +25,67 @@ export default function AISettings() {
   const [maxLength, setMaxLength] = useState([280])
   const [useEmojis, setUseEmojis] = useState(true)
   const [avoidControversy, setAvoidControversy] = useState(true)
+  const [systemPrompt, setSystemPrompt] = useState("")
+  const [companyContext, setCompanyContext] = useState("")
+  const [ctaExamples, setCtaExamples] = useState("")
+  const [loading, setLoading] = useState(false)
+  const { user } = useAuth()
+  const { toast } = useToast()
+
+  useEffect(() => {
+    loadAISettings()
+  }, [])
+
+  const loadAISettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('ai_settings')
+        .select('*')
+        .eq('user_id', user?.id)
+        .single()
+
+      if (error && error.code !== 'PGRST116') throw error
+
+      if (data) {
+        setCreativity([data.temperature * 100])
+        setMaxLength([data.max_tokens])
+        setSystemPrompt(data.prompt_template || "")
+      }
+    } catch (error) {
+      console.error('Erro ao carregar configurações de IA:', error)
+    }
+  }
+
+  const saveSettings = async () => {
+    setLoading(true)
+    try {
+      const { error } = await supabase
+        .from('ai_settings')
+        .upsert({
+          user_id: user?.id,
+          temperature: creativity[0] / 100,
+          max_tokens: maxLength[0],
+          prompt_template: systemPrompt || 'Gere um comentário relevante e engajante sobre o seguinte tópico: {topic}',
+          model: 'gpt-4'
+        })
+
+      if (error) throw error
+
+      toast({
+        title: "Sucesso",
+        description: "Configurações de IA salvas com sucesso!"
+      })
+    } catch (error) {
+      console.error('Erro ao salvar configurações:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível salvar as configurações",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -32,9 +96,9 @@ export default function AISettings() {
             Configure o tom, estilo e personalidade dos comentários automáticos
           </p>
         </div>
-        <Button>
+        <Button onClick={saveSettings} disabled={loading}>
           <Save className="h-4 w-4 mr-2" />
-          Salvar Configurações
+          {loading ? "Salvando..." : "Salvar Configurações"}
         </Button>
       </div>
 
@@ -135,6 +199,8 @@ export default function AISettings() {
                 id="system-prompt"
                 placeholder="Você é um especialista em marketing digital que sempre adiciona insights valiosos..."
                 className="min-h-[100px]"
+                value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
               />
             </div>
 
@@ -144,6 +210,8 @@ export default function AISettings() {
                 id="context-prompt"
                 placeholder="Nossa empresa atua no segmento de tecnologia, focando em soluções inovadoras..."
                 className="min-h-[80px]"
+                value={companyContext}
+                onChange={(e) => setCompanyContext(e.target.value)}
               />
             </div>
 
@@ -153,6 +221,8 @@ export default function AISettings() {
                 id="cta-examples"
                 placeholder="O que você acha dessa abordagem?&#10;Gostaria de trocar experiências sobre isso.&#10;Tem alguma dica para compartilhar?"
                 className="min-h-[80px]"
+                value={ctaExamples}
+                onChange={(e) => setCtaExamples(e.target.value)}
               />
             </div>
           </CardContent>

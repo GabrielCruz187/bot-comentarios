@@ -11,8 +11,45 @@ import {
   Play,
   Pause
 } from "lucide-react"
+import { useNavigate } from "react-router-dom"
+import { useState, useEffect } from "react"
+import { supabase } from "@/integrations/supabase/client"
+import { useAuth } from "@/hooks/useAuth"
 
 export default function Dashboard() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const [stats, setStats] = useState({
+    comments: 0,
+    profiles: 0,
+    keywords: 0,
+    activities: 0
+  })
+
+  useEffect(() => {
+    if (user) {
+      loadStats()
+    }
+  }, [user])
+
+  const loadStats = async () => {
+    try {
+      const [commentsRes, profilesRes, keywordsRes] = await Promise.all([
+        supabase.from('comments').select('id', { count: 'exact' }).eq('user_id', user?.id),
+        supabase.from('profiles').select('id', { count: 'exact' }).eq('user_id', user?.id),
+        supabase.from('keywords').select('id', { count: 'exact' }).eq('user_id', user?.id)
+      ])
+
+      setStats({
+        comments: commentsRes.count || 0,
+        profiles: profilesRes.count || 0,
+        keywords: keywordsRes.count || 0,
+        activities: (commentsRes.count || 0) + (profilesRes.count || 0) + (keywordsRes.count || 0)
+      })
+    } catch (error) {
+      console.error('Erro ao carregar estatísticas:', error)
+    }
+  }
   return (
     <div className="space-y-6">
       {/* Welcome Section */}
@@ -24,13 +61,13 @@ export default function Dashboard() {
           Automatize seus comentários e acelere seu crescimento no LinkedIn e X
         </p>
         <div className="flex gap-3">
-          <Button>
+          <Button onClick={() => navigate('/profiles')}>
             <Plus className="h-4 w-4 mr-2" />
             Adicionar Perfil
           </Button>
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => navigate('/keywords')}>
             <Play className="h-4 w-4 mr-2" />
-            Iniciar Automação
+            Configurar Automação
           </Button>
         </div>
       </div>
@@ -38,31 +75,28 @@ export default function Dashboard() {
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatsCard
-          title="Comentários Hoje"
-          value={23}
-          description="Meta: 50 comentários/dia"
+          title="Comentários Totais"
+          value={stats.comments}
+          description="Comentários gerados"
           icon={MessageSquare}
-          trend={{ value: 12, isPositive: true }}
         />
         <StatsCard
-          title="Perfis Ativos"
-          value={12}
-          description="De 50 perfis configurados"
+          title="Perfis-Alvo"
+          value={stats.profiles}
+          description="Perfis configurados"
           icon={Users}
-          trend={{ value: 8, isPositive: true }}
         />
         <StatsCard
           title="Palavras-Chave"
-          value={7}
+          value={stats.keywords}
           description="Monitorando ativamente"
           icon={Target}
         />
         <StatsCard
-          title="Taxa de Engajamento"
-          value="4.2%"
-          description="Média dos últimos 30 dias"
+          title="Atividades"
+          value={stats.activities}
+          description="Registros de histórico"
           icon={TrendingUp}
-          trend={{ value: 0.5, isPositive: true }}
         />
       </div>
 
@@ -72,19 +106,35 @@ export default function Dashboard() {
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4">Ações Rápidas</h3>
           <div className="space-y-3">
-            <Button className="w-full justify-start" variant="outline">
+            <Button 
+              className="w-full justify-start" 
+              variant="outline"
+              onClick={() => navigate('/profiles')}
+            >
               <Users className="h-4 w-4 mr-2" />
               Gerenciar Perfis-Alvo
             </Button>
-            <Button className="w-full justify-start" variant="outline">
+            <Button 
+              className="w-full justify-start" 
+              variant="outline"
+              onClick={() => navigate('/keywords')}
+            >
               <Target className="h-4 w-4 mr-2" />
               Configurar Palavras-Chave
             </Button>
-            <Button className="w-full justify-start" variant="outline">
+            <Button 
+              className="w-full justify-start" 
+              variant="outline"
+              onClick={() => navigate('/ai-settings')}
+            >
               <MessageSquare className="h-4 w-4 mr-2" />
               Personalizar IA
             </Button>
-            <Button className="w-full justify-start" variant="outline">
+            <Button 
+              className="w-full justify-start" 
+              variant="outline"
+              onClick={() => navigate('/reports')}
+            >
               <TrendingUp className="h-4 w-4 mr-2" />
               Ver Relatórios
             </Button>

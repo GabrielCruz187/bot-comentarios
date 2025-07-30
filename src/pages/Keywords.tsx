@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -6,6 +6,9 @@ import { Badge } from "@/components/ui/badge"
 import { Target, Plus, Search, Activity, Brain } from "lucide-react"
 import { KeywordItem } from "@/components/keywords/KeywordItem"
 import { Textarea } from "@/components/ui/textarea"
+import { useToast } from "@/hooks/use-toast"
+import { supabase } from "@/integrations/supabase/client"
+import { useAuth } from "@/hooks/useAuth"
 import {
   Select,
   SelectContent,
@@ -14,37 +17,82 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-const mockKeywords = [
-  {
-    id: "1",
-    term: "marketing digital",
-    operator: "AND" as const,
-    active: true,
-    matches: 23,
-    createdAt: "15/01/2024"
-  },
-  {
-    id: "2",
-    term: "inteligência artificial",
-    operator: "OR" as const,
-    active: true,
-    matches: 45,
-    createdAt: "14/01/2024"
-  },
-  {
-    id: "3",
-    term: "política",
-    operator: "NOT" as const,
-    active: true,
-    matches: 12,
-    createdAt: "13/01/2024"
-  }
-]
-
 export default function Keywords() {
   const [searchTerm, setSearchTerm] = useState("")
   const [newKeyword, setNewKeyword] = useState("")
   const [newOperator, setNewOperator] = useState("AND")
+  const [newDescription, setNewDescription] = useState("")
+  const [keywords, setKeywords] = useState([])
+  const [loading, setLoading] = useState(false)
+  const { toast } = useToast()
+  const { user } = useAuth()
+
+  useEffect(() => {
+    loadKeywords()
+  }, [])
+
+  const loadKeywords = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('keywords')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setKeywords(data || [])
+    } catch (error) {
+      console.error('Erro ao carregar palavras-chave:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar as palavras-chave",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleAddKeyword = async () => {
+    if (!newKeyword.trim()) {
+      toast({
+        title: "Erro",
+        description: "Digite uma palavra-chave",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setLoading(true)
+    try {
+      const { error } = await supabase
+        .from('keywords')
+        .insert({
+          keyword: newKeyword.trim(),
+          operator: newOperator as 'AND' | 'OR' | 'NOT',
+          description: newDescription.trim() || null,
+          user_id: user?.id
+        })
+
+      if (error) throw error
+
+      toast({
+        title: "Sucesso",
+        description: "Palavra-chave adicionada com sucesso!"
+      })
+
+      setNewKeyword("")
+      setNewDescription("")
+      setNewOperator("AND")
+      loadKeywords()
+    } catch (error) {
+      console.error('Erro ao adicionar palavra-chave:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível adicionar a palavra-chave",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -69,7 +117,7 @@ export default function Keywords() {
             <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockKeywords.length}</div>
+            <div className="text-2xl font-bold">{keywords.length}</div>
             <p className="text-xs text-muted-foreground">palavras ativas</p>
           </CardContent>
         </Card>
@@ -81,7 +129,7 @@ export default function Keywords() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {mockKeywords.reduce((sum, k) => sum + k.matches, 0)}
+              {keywords.reduce((sum, k) => sum + (k.matches_count || 0), 0)}
             </div>
             <p className="text-xs text-muted-foreground">últimas 24h</p>
           </CardContent>
@@ -94,7 +142,7 @@ export default function Keywords() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {mockKeywords.filter(k => k.operator === 'AND').length}
+              {keywords.filter(k => k.operator === 'AND').length}
             </div>
           </CardContent>
         </Card>
@@ -106,7 +154,7 @@ export default function Keywords() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {mockKeywords.filter(k => k.operator === 'NOT').length}
+              {keywords.filter(k => k.operator === 'NOT').length}
             </div>
           </CardContent>
         </Card>
@@ -143,15 +191,19 @@ export default function Keywords() {
           
           <div>
             <Textarea 
-              placeholder="Exemplo de lógica: (marketing digital AND startup) OR (empreendedorismo) NOT (política)"
+              placeholder="Descrição opcional da palavra-chave..."
               className="min-h-[60px]"
+              value={newDescription}
+              onChange={(e) => setNewDescription(e.target.value)}
             />
             <p className="text-xs text-muted-foreground mt-2">
-              Use parênteses para agrupar termos e crie lógicas complexas
+              Descreva o contexto ou objetivo desta palavra-chave
             </p>
           </div>
           
-          <Button>Adicionar Palavra-Chave</Button>
+          <Button onClick={handleAddKeyword} disabled={loading}>
+            {loading ? "Adicionando..." : "Adicionar Palavra-Chave"}
+          </Button>
         </CardContent>
       </Card>
 
@@ -172,9 +224,23 @@ export default function Keywords() {
 
       {/* Lista de Palavras-Chave */}
       <div className="space-y-4">
-        {mockKeywords.map((keyword) => (
-          <KeywordItem key={keyword.id} keyword={keyword} />
-        ))}
+        {keywords.length === 0 ? (
+          <Card>
+            <CardContent className="pt-6 text-center">
+              <p className="text-muted-foreground">Nenhuma palavra-chave cadastrada</p>
+            </CardContent>
+          </Card>
+        ) : (
+            keywords
+            .filter(keyword => keyword.keyword.toLowerCase().includes(searchTerm.toLowerCase()))
+            .map((keyword) => (
+              <KeywordItem 
+                key={keyword.id} 
+                keyword={keyword} 
+                onDelete={loadKeywords}
+              />
+            ))
+        )}
       </div>
     </div>
   )

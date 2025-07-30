@@ -3,19 +3,48 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Edit, Trash2, Activity } from "lucide-react"
+import { supabase } from "@/integrations/supabase/client"
+import { useToast } from "@/hooks/use-toast"
 
 interface KeywordItemProps {
   keyword: {
     id: string
-    term: string
+    keyword: string
     operator: 'AND' | 'OR' | 'NOT'
-    active: boolean
-    matches: number
-    createdAt: string
+    matches_count?: number
+    created_at: string
+    description?: string
   }
+  onDelete?: () => void
 }
 
-export function KeywordItem({ keyword }: KeywordItemProps) {
+export function KeywordItem({ keyword, onDelete }: KeywordItemProps) {
+  const { toast } = useToast()
+
+  const handleDelete = async () => {
+    try {
+      const { error } = await supabase
+        .from('keywords')
+        .delete()
+        .eq('id', keyword.id)
+
+      if (error) throw error
+
+      toast({
+        title: "Sucesso",
+        description: "Palavra-chave removida com sucesso!"
+      })
+
+      onDelete?.()
+    } catch (error) {
+      console.error('Erro ao deletar palavra-chave:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível remover a palavra-chave",
+        variant: "destructive"
+      })
+    }
+  }
   const getOperatorColor = (operator: string) => {
     switch (operator) {
       case 'AND': return 'bg-green-100 text-green-800'
@@ -32,14 +61,19 @@ export function KeywordItem({ keyword }: KeywordItemProps) {
           <Badge className={getOperatorColor(keyword.operator)}>
             {keyword.operator}
           </Badge>
-          <h3 className="font-medium">{keyword.term}</h3>
+          <h3 className="font-medium">{keyword.keyword}</h3>
         </div>
         <div className="flex items-center space-x-2">
-          <Switch checked={keyword.active} />
+          <Switch checked={true} />
           <Button variant="ghost" size="sm">
             <Edit className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm" className="text-destructive">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="text-destructive"
+            onClick={handleDelete}
+          >
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
@@ -48,13 +82,14 @@ export function KeywordItem({ keyword }: KeywordItemProps) {
         <div className="flex items-center justify-between text-sm">
           <div className="flex items-center space-x-1 text-muted-foreground">
             <Activity className="h-4 w-4" />
-            <span>{keyword.matches} correspondências</span>
+            <span>{keyword.matches_count || 0} correspondências</span>
           </div>
           <span className="text-muted-foreground">
-            Criado em {keyword.createdAt}
+            {new Date(keyword.created_at).toLocaleDateString('pt-BR')}
           </span>
         </div>
       </CardContent>
     </Card>
   )
 }
+

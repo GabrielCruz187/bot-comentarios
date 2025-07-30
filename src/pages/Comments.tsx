@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,48 +18,102 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs"
-
-const mockComments = [
-  {
-    id: "1",
-    text: "Excelente perspectiva sobre o futuro do marketing digital! Concordo que a personalização será fundamental.",
-    postUrl: "https://linkedin.com/post/1",
-    platform: "linkedin" as const,
-    author: {
-      name: "João Silva",
-      handle: "joaosilva",
-      avatar: ""
-    },
-    status: "posted" as const,
-    engagement: {
-      likes: 12,
-      replies: 3
-    },
-    createdAt: "2 horas atrás"
-  },
-  {
-    id: "2",
-    text: "Muito interessante! Seria possível compartilhar mais detalhes sobre a implementação?",
-    postUrl: "https://twitter.com/post/1",
-    platform: "twitter" as const,
-    author: {
-      name: "Maria Santos",
-      handle: "mariasantos",
-      avatar: ""
-    },
-    status: "pending" as const,
-    engagement: {
-      likes: 0,
-      replies: 0
-    },
-    createdAt: "1 hora atrás"
-  }
-]
+import { supabase } from "@/integrations/supabase/client"
+import { useAuth } from "@/hooks/useAuth"
+import { useToast } from "@/hooks/use-toast"
 
 export default function Comments() {
   const [searchTerm, setSearchTerm] = useState("")
   const [platformFilter, setPlatformFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [comments, setComments] = useState([])
+  const [profiles, setProfiles] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState({
+    total: 0,
+    posted: 0,
+    pending: 0,
+    failed: 0
+  })
+  const { user } = useAuth()
+  const { toast } = useToast()
+
+  useEffect(() => {
+    loadComments()
+    loadProfiles()
+  }, [])
+
+  const loadComments = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('comments')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      const commentsData = data || []
+      setComments(commentsData)
+
+      // Calcular estatísticas
+      const total = commentsData.length
+      const posted = commentsData.filter(c => c.status === 'posted').length
+      const pending = commentsData.filter(c => c.status === 'pending').length
+      const failed = commentsData.filter(c => c.status === 'failed').length
+
+      setStats({ total, posted, pending, failed })
+    } catch (error) {
+      console.error('Erro ao carregar comentários:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar os comentários",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadProfiles = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+
+      if (error) throw error
+      setProfiles(data || [])
+    } catch (error) {
+      console.error('Erro ao carregar perfis:', error)
+    }
+  }
+
+  const filteredComments = comments.filter(comment => {
+    const matchesSearch = comment.content.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesPlatform = platformFilter === "all" || comment.platform === platformFilter
+    const matchesStatus = statusFilter === "all" || comment.status === statusFilter
+    return matchesSearch && matchesPlatform && matchesStatus
+  })
+
+  const formatCommentForCard = (comment) => {
+    const profile = profiles.find(p => p.id === comment.profile_id) || {}
+    return {
+      id: comment.id,
+      text: comment.content,
+      postUrl: comment.post_url || "#",
+      platform: profile.platform || "linkedin",
+      author: {
+        name: profile.name || "Usuário",
+        handle: profile.username || "username",
+        avatar: profile.avatar_url || ""
+      },
+      status: comment.status,
+      engagement: {
+        likes: 0, // Dados de engajamento não estão sendo coletados ainda
+        replies: 0
+      },
+      createdAt: new Date(comment.created_at).toLocaleDateString('pt-BR')
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -84,9 +138,9 @@ export default function Comments() {
             <MessageSquare className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">142</div>
+            <div className="text-2xl font-bold">{stats.total}</div>
             <p className="text-xs text-muted-foreground">
-              +23% vs ontem
+              total de comentários
             </p>
           </CardContent>
         </Card>
@@ -97,9 +151,9 @@ export default function Comments() {
             <CheckCircle className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">128</div>
+            <div className="text-2xl font-bold">{stats.posted}</div>
             <p className="text-xs text-muted-foreground">
-              90% taxa de sucesso
+              {stats.total > 0 ? Math.round((stats.posted / stats.total) * 100) : 0}% taxa de sucesso
             </p>
           </CardContent>
         </Card>
@@ -110,7 +164,7 @@ export default function Comments() {
             <Clock className="h-4 w-4 text-yellow-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">14</div>
+            <div className="text-2xl font-bold">{stats.pending}</div>
             <p className="text-xs text-muted-foreground">
               aguardando processamento
             </p>
@@ -191,29 +245,48 @@ export default function Comments() {
         </Card>
 
         <TabsContent value="all" className="space-y-4">
-          {mockComments.map((comment) => (
-            <CommentCard key={comment.id} comment={comment} />
-          ))}
+          {loading ? (
+            <p className="text-center text-muted-foreground py-8">Carregando comentários...</p>
+          ) : filteredComments.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">Nenhum comentário encontrado</p>
+          ) : (
+            filteredComments.map((comment) => (
+              <CommentCard key={comment.id} comment={formatCommentForCard(comment)} />
+            ))
+          )}
         </TabsContent>
 
         <TabsContent value="posted" className="space-y-4">
-          {mockComments.filter(c => c.status === 'posted').map((comment) => (
-            <CommentCard key={comment.id} comment={comment} />
-          ))}
+          {filteredComments.filter(c => c.status === 'posted').length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">Nenhum comentário publicado encontrado</p>
+          ) : (
+            filteredComments.filter(c => c.status === 'posted').map((comment) => (
+              <CommentCard key={comment.id} comment={formatCommentForCard(comment)} />
+            ))
+          )}
         </TabsContent>
 
         <TabsContent value="pending" className="space-y-4">
-          {mockComments.filter(c => c.status === 'pending').map((comment) => (
-            <CommentCard key={comment.id} comment={comment} />
-          ))}
+          {filteredComments.filter(c => c.status === 'pending').length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">Nenhum comentário pendente encontrado</p>
+          ) : (
+            filteredComments.filter(c => c.status === 'pending').map((comment) => (
+              <CommentCard key={comment.id} comment={formatCommentForCard(comment)} />
+            ))
+          )}
         </TabsContent>
 
         <TabsContent value="failed" className="space-y-4">
-          <p className="text-center text-muted-foreground py-8">
-            Nenhum comentário com falha encontrado
-          </p>
+          {filteredComments.filter(c => c.status === 'failed').length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">Nenhum comentário com falha encontrado</p>
+          ) : (
+            filteredComments.filter(c => c.status === 'failed').map((comment) => (
+              <CommentCard key={comment.id} comment={formatCommentForCard(comment)} />
+            ))
+          )}
         </TabsContent>
       </Tabs>
     </div>
   )
 }
+

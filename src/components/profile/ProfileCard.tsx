@@ -14,12 +14,12 @@ interface ProfileCardProps {
   profile: {
     id: string
     name: string
-    handle: string
-    platform: 'linkedin' | 'twitter'
-    avatar?: string
+    username: string
+    platform: string
+    avatar_url?: string
     status: 'active' | 'paused' | 'inactive'
-    totalComments: number
-    lastActivity: string
+    followers_count?: number
+    created_at: string
   }
 }
 
@@ -46,12 +46,12 @@ export function ProfileCard({ profile }: ProfileCardProps) {
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <div className="flex items-center space-x-3">
           <Avatar className="h-10 w-10">
-            <AvatarImage src={profile.avatar} />
+            <AvatarImage src={profile.avatar_url} />
             <AvatarFallback>{profile.name.slice(0, 2).toUpperCase()}</AvatarFallback>
           </Avatar>
           <div>
             <CardTitle className="text-sm font-medium">{profile.name}</CardTitle>
-            <p className="text-xs text-muted-foreground">@{profile.handle}</p>
+            <p className="text-xs text-muted-foreground">@{profile.username}</p>
           </div>
         </div>
         <DropdownMenu>
@@ -87,12 +87,12 @@ export function ProfileCard({ profile }: ProfileCardProps) {
         </div>
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
-            <p className="text-muted-foreground">Comentários</p>
-            <p className="font-semibold">{profile.totalComments}</p>
+            <p className="text-muted-foreground">Seguidores</p>
+            <p className="font-semibold">{profile.followers_count || 0}</p>
           </div>
           <div>
-            <p className="text-muted-foreground">Última atividade</p>
-            <p className="font-semibold">{profile.lastActivity}</p>
+            <p className="text-muted-foreground">Adicionado em</p>
+            <p className="font-semibold">{new Date(profile.created_at).toLocaleDateString('pt-BR')}</p>
           </div>
         </div>
       </CardContent>

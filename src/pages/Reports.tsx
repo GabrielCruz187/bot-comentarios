@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -10,8 +11,57 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { supabase } from "@/integrations/supabase/client"
+import { useAuth } from "@/hooks/useAuth"
 
 export default function Reports() {
+  const [stats, setStats] = useState({
+    totalComments: 0,
+    engagementRate: 0,
+    newContacts: 0,
+    conversionRate: 0
+  })
+  const [keywords, setKeywords] = useState([])
+  const [profiles, setProfiles] = useState([])
+  const { user } = useAuth()
+
+  useEffect(() => {
+    loadReportsData()
+  }, [])
+
+  const loadReportsData = async () => {
+    try {
+      // Carregar comentários
+      const { data: comments } = await supabase
+        .from('comments')
+        .select('*')
+        .eq('user_id', user?.id)
+
+      // Carregar palavras-chave
+      const { data: keywordsData } = await supabase
+        .from('keywords')
+        .select('*')
+        .eq('user_id', user?.id)
+
+      // Carregar perfis
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', user?.id)
+
+      setStats({
+        totalComments: comments?.length || 0,
+        engagementRate: 8.7, // Placeholder
+        newContacts: 89, // Placeholder
+        conversionRate: 12.3 // Placeholder
+      })
+
+      setKeywords(keywordsData || [])
+      setProfiles(profilesData || [])
+    } catch (error) {
+      console.error('Erro ao carregar dados dos relatórios:', error)
+    }
+  }
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -48,7 +98,7 @@ export default function Reports() {
             <MessageSquare className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">1,234</div>
+            <div className="text-2xl font-bold">{stats.totalComments}</div>
             <p className="text-xs text-muted-foreground">
               <span className="text-green-600">+15%</span> vs período anterior
             </p>
@@ -61,7 +111,7 @@ export default function Reports() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">8.7%</div>
+            <div className="text-2xl font-bold">{stats.engagementRate}%</div>
             <p className="text-xs text-muted-foreground">
               <span className="text-green-600">+2.1%</span> vs período anterior
             </p>
@@ -74,7 +124,7 @@ export default function Reports() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">89</div>
+            <div className="text-2xl font-bold">{stats.newContacts}</div>
             <p className="text-xs text-muted-foreground">
               <span className="text-green-600">+23%</span> vs período anterior
             </p>
@@ -87,7 +137,7 @@ export default function Reports() {
             <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">12.3%</div>
+            <div className="text-2xl font-bold">{stats.conversionRate}%</div>
             <p className="text-xs text-muted-foreground">
               <span className="text-red-600">-1.2%</span> vs período anterior
             </p>
@@ -124,18 +174,16 @@ export default function Reports() {
                 <CardTitle>Top Palavras-chave</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">marketing digital</span>
-                  <Badge>156 matches</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">inteligência artificial</span>
-                  <Badge>134 matches</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">startup</span>
-                  <Badge>98 matches</Badge>
-                </div>
+                {keywords.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nenhuma palavra-chave cadastrada</p>
+                ) : (
+                  keywords.slice(0, 3).map((keyword) => (
+                    <div key={keyword.id} className="flex items-center justify-between">
+                      <span className="text-sm">{keyword.keyword}</span>
+                      <Badge>{keyword.matches_count || 0} matches</Badge>
+                    </div>
+                  ))
+                )}
               </CardContent>
             </Card>
 
@@ -144,18 +192,16 @@ export default function Reports() {
                 <CardTitle>Melhores Perfis</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">João Silva</span>
-                  <Badge>23.4% engajamento</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">Maria Santos</span>
-                  <Badge>19.7% engajamento</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">Pedro Costa</span>
-                  <Badge>18.2% engajamento</Badge>
-                </div>
+                {profiles.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nenhum perfil cadastrado</p>
+                ) : (
+                  profiles.slice(0, 3).map((profile) => (
+                    <div key={profile.id} className="flex items-center justify-between">
+                      <span className="text-sm">{profile.name}</span>
+                      <Badge>Ativo</Badge>
+                    </div>
+                  ))
+                )}
               </CardContent>
             </Card>
           </div>

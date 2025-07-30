@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,44 +19,74 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-
-const mockHistory = [
-  {
-    id: "1",
-    date: "2024-01-17 14:30",
-    action: "Comentário postado",
-    platform: "LinkedIn",
-    target: "João Silva",
-    content: "Excelente perspectiva sobre marketing digital...",
-    status: "success",
-    engagement: { likes: 12, replies: 3 }
-  },
-  {
-    id: "2",
-    date: "2024-01-17 13:15",
-    action: "Perfil adicionado",
-    platform: "X",
-    target: "Maria Santos",
-    content: "Novo perfil-alvo adicionado ao monitoramento",
-    status: "success",
-    engagement: { likes: 0, replies: 0 }
-  },
-  {
-    id: "3",
-    date: "2024-01-17 12:45",
-    action: "Comentário falhado",
-    platform: "LinkedIn",
-    target: "Pedro Costa",
-    content: "Erro ao publicar comentário: limite de caracteres",
-    status: "error",
-    engagement: { likes: 0, replies: 0 }
-  }
-]
+import { supabase } from "@/integrations/supabase/client"
+import { useAuth } from "@/hooks/useAuth"
 
 export default function History() {
   const [searchTerm, setSearchTerm] = useState("")
   const [platformFilter, setPlatformFilter] = useState("all")
   const [actionFilter, setActionFilter] = useState("all")
+  const [history, setHistory] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState({
+    total: 0,
+    success: 0,
+    failed: 0
+  })
+  const { user } = useAuth()
+
+  useEffect(() => {
+    loadHistory()
+  }, [])
+
+  const loadHistory = async () => {
+    try {
+      // Carregar comentários como histórico
+      const { data: comments, error } = await supabase
+        .from('comments')
+        .select(`
+          *,
+          profiles (name, platform)
+        `)
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      const historyData = comments?.map(comment => ({
+        id: comment.id,
+        date: new Date(comment.created_at).toLocaleDateString('pt-BR') + ' ' + 
+              new Date(comment.created_at).toLocaleTimeString('pt-BR'),
+        action: "Comentário " + (comment.status === 'posted' ? 'postado' : 
+                comment.status === 'pending' ? 'pendente' : 'falhado'),
+        platform: comment.profiles?.platform || "LinkedIn",
+        target: comment.profiles?.name || "Usuário",
+        content: comment.content,
+        status: comment.status === 'posted' ? 'success' : 'error',
+        engagement: { likes: 0, replies: 0 }
+      })) || []
+
+      setHistory(historyData)
+
+      const total = historyData.length
+      const success = historyData.filter(h => h.status === 'success').length
+      const failed = total - success
+
+      setStats({ total, success, failed })
+    } catch (error) {
+      console.error('Erro ao carregar histórico:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const filteredHistory = history.filter(item => {
+    const matchesSearch = item.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         item.target.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesPlatform = platformFilter === "all" || item.platform.toLowerCase() === platformFilter
+    const matchesAction = actionFilter === "all" || item.action.toLowerCase().includes(actionFilter)
+    return matchesSearch && matchesPlatform && matchesAction
+  })
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -104,7 +134,7 @@ export default function History() {
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">2,457</div>
+            <div className="text-2xl font-bold">{stats.total}</div>
             <p className="text-xs text-muted-foreground">últimos 30 dias</p>
           </CardContent>
         </Card>
@@ -115,8 +145,10 @@ export default function History() {
             <Badge className="bg-green-500">✓</Badge>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">2,341</div>
-            <p className="text-xs text-muted-foreground">95.3% taxa de sucesso</p>
+            <div className="text-2xl font-bold">{stats.success}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats.total > 0 ? Math.round((stats.success / stats.total) * 100) : 0}% taxa de sucesso
+            </p>
           </CardContent>
         </Card>
 
@@ -126,8 +158,10 @@ export default function History() {
             <Badge className="bg-red-500">✗</Badge>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">116</div>
-            <p className="text-xs text-muted-foreground">4.7% taxa de erro</p>
+            <div className="text-2xl font-bold">{stats.failed}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats.total > 0 ? Math.round((stats.failed / stats.total) * 100) : 0}% taxa de erro
+            </p>
           </CardContent>
         </Card>
 
@@ -208,7 +242,20 @@ export default function History() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockHistory.map((item) => (
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8">
+                    Carregando histórico...
+                  </TableCell>
+                </TableRow>
+              ) : filteredHistory.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8">
+                    Nenhum registro encontrado
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredHistory.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell className="font-mono text-xs">
                     {item.date}
@@ -247,7 +294,8 @@ export default function History() {
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
